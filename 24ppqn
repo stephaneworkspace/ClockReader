@@ -1,0 +1,65 @@
+#include <Bela.h>
+#include <stdio.h>
+
+// Seuil de détection
+float threshold = 0.1;  // Ajuster le seuil pour capter correctement le signal
+// Pin de la LED sur Bela Mini (par exemple D0)
+int ledPin = 0;
+
+int pulseCounter = 0;  // Compteur pour diviser la clock
+int pulsesPerBeat = 4;  // Nombre d'impulsions par battement (4 dans ton cas)
+bool previousState = false;  // Suivre l'état précédent pour détecter le front montant
+unsigned int ledState = 0;  // Etat de la LED (allumée ou éteinte)
+unsigned long ledLastChangeTime = 0;  // Dernière fois que la LED a changé d'état
+unsigned long ledOnDuration = 100;  // Durée pendant laquelle la LED reste allumée (en ms)
+
+bool setup(BelaContext *context, void *userData)
+{
+    pinMode(context, 0, ledPin, OUTPUT);  // Configurer la pin de la LED en sortie
+    return true;
+}
+
+void render(BelaContext *context, void *userData)
+{
+    unsigned long currentTime = context->audioFramesElapsed / context->audioSampleRate * 1000;  // Convertir les échantillons en ms
+
+    for(unsigned int n = 0; n < context->audioFrames; n++) {
+        // Lecture du signal sur l'entrée analogique A0
+        float analogValue = analogRead(context, n/2, 0);  // A0 est l'index 0
+
+        // Vérifier le front montant (passage sous le seuil à au-dessus du seuil)
+        if (analogValue > threshold && !previousState) {
+            // On détecte un front montant
+            pulseCounter++;
+
+            // Afficher le compteur d'impulsions dans la console pour diagnostic
+            rt_printf("Pulse Counter: %d\n", pulseCounter);
+
+            // Si le compteur atteint le nombre d'impulsions par battement
+            if (pulseCounter >= pulsesPerBeat) {
+                pulseCounter = 0;  // Réinitialiser le compteur
+
+                // Allumer la LED pour indiquer un battement réel
+                ledState = 1;
+                ledLastChangeTime = currentTime;  // Mémoriser l'heure d'allumage de la LED
+                digitalWrite(context, n, ledPin, HIGH);
+            }
+        }
+
+        // Mise à jour de l'état précédent
+        previousState = (analogValue > threshold);
+
+        // Éteindre la LED après qu'elle soit restée allumée pendant la durée spécifiée
+        if (ledState == 1 && currentTime - ledLastChangeTime > ledOnDuration) {
+            digitalWrite(context, n, ledPin, LOW);  // Éteindre la LED
+            ledState = 0;  // Réinitialiser l'état de la LED
+        }
+    }
+}
+
+void cleanup(BelaContext *context, void *userData)
+{
+    // Rien à nettoyer
+}
+
+// Voir chat GPT
